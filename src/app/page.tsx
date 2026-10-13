@@ -1,8 +1,8 @@
 import Link from "next/link";
+import { ArrowRight, CalendarDays, Trophy, Users, Zap } from "lucide-react";
 import { MatchCard } from "@/components/MatchCard";
 import { prisma } from "@/lib/prisma";
 import { getStandings } from "@/lib/standings";
-import { formatMatchTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -13,99 +13,79 @@ export default async function HomePage() {
       orderBy: [{ scheduledAt: "asc" }, { matchNumber: "asc" }],
     }),
     getStandings(),
-    prisma.team.count(),
+    prisma.team.findMany({ orderBy: { name: "asc" } }),
   ]);
 
-  const first = matches[0];
-  const upcoming = matches.filter((m) => m.status !== "COMPLETED").slice(0, 4);
   const live = matches.filter((m) => m.status === "LIVE");
+  const featured =
+    live[0] ?? matches.find((m) => m.status !== "COMPLETED") ?? matches[0];
+  const upcoming = matches.filter((m) => m.status !== "COMPLETED").slice(0, 4);
   const completed = matches.filter((m) => m.status === "COMPLETED").length;
+  const leader = completed > 0 ? standings[0] : null;
 
   return (
     <main className="page">
       <section className="hero">
         <div className="hero-copy">
-          <p className="hero-brand">
+          <p className="eyebrow">Doubles table tennis league</p>
+          <h1 className="hero-title">
             Smash
             <span>League</span>
-          </p>
-          <h1>Doubles table tennis. Full league. Live scoring.</h1>
-          <p>
-            Four teams. Twelve matches. Sherry & Ahsan tip off at 3:00 PM —
-            everyone else plays at 7:30 PM.
+          </h1>
+          <p className="hero-lede">
+            Four teams. Twelve fixtures. Click-to-score match center with live
+            standings — Sherry & Ahsan at 3:00 PM, everyone else at 7:30 PM.
           </p>
           <div className="hero-cta">
             <Link
-              href={first ? `/matches/${first.id}` : "/matches"}
+              href={featured ? `/matches/${featured.id}` : "/matches"}
               className="btn btn-primary"
             >
-              Open first match
+              {live.length > 0 ? "Enter live match" : "Open next match"}
+              <ArrowRight size={16} aria-hidden />
             </Link>
             <Link href="/leaderboard" className="btn btn-ghost">
-              View leaderboard
+              View standings
             </Link>
           </div>
         </div>
 
-        <div className="hero-stage" aria-hidden>
-          <div className="hero-court" />
-          <div className="hero-streak hero-streak-a" />
-          <div className="hero-streak hero-streak-b" />
-          <div className="hero-paddle">
-            <div className="hero-ball" />
+        {featured && (
+          <div className="hero-feature-wrap">
+            <MatchCard {...featured} />
           </div>
-          <div className="hero-chip">Best of 5</div>
-        </div>
+        )}
       </section>
 
-      <div className="stats-strip" aria-label="League snapshot">
+      <section className="stats-strip" aria-label="League snapshot">
         <div className="stat">
+          <Users size={16} aria-hidden />
           <span>Teams</span>
-          <strong>{teams}</strong>
+          <strong>{teams.length}</strong>
         </div>
         <div className="stat">
-          <span>Match pool</span>
+          <CalendarDays size={16} aria-hidden />
+          <span>Matches</span>
           <strong>{matches.length}</strong>
         </div>
         <div className="stat">
+          <Zap size={16} aria-hidden />
           <span>Completed</span>
           <strong>{completed}</strong>
         </div>
         <div className="stat">
+          <Trophy size={16} aria-hidden />
           <span>Leader</span>
-          <strong>
-            {completed > 0
-              ? (standings[0]?.teamName.split(" & ")[0] ?? "—")
-              : "TBD"}
-          </strong>
+          <strong>{leader ? leader.teamName.split(" & ")[0] : "TBD"}</strong>
         </div>
-      </div>
-
-      {first && (
-        <section className="section">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Tip-off</p>
-              <h2>Playing first</h2>
-              <p>
-                Match {first.matchNumber} · {formatMatchTime(first.scheduledAt)} ·{" "}
-                {first.homeTeam.name} vs {first.awayTeam.name}
-              </p>
-            </div>
-          </div>
-          <div className="match-list">
-            <MatchCard {...first} />
-          </div>
-        </section>
-      )}
+      </section>
 
       {live.length > 0 && (
         <section className="section">
           <div className="section-head">
             <div>
-              <p className="section-kicker">Right now</p>
+              <p className="section-kicker">In progress</p>
               <h2>Live now</h2>
-              <p>Matches currently in progress.</p>
             </div>
           </div>
           <div className="match-list">
@@ -119,9 +99,9 @@ export default async function HomePage() {
       <section className="section">
         <div className="section-head">
           <div>
-            <p className="section-kicker">Schedule</p>
+            <p className="section-kicker">Fixtures</p>
             <h2>Up next</h2>
-            <p>Upcoming fixtures from the league pool.</p>
+            <p>Upcoming matches from the league pool.</p>
           </div>
           <Link href="/matches" className="btn btn-ghost">
             All matches
@@ -130,6 +110,52 @@ export default async function HomePage() {
         <div className="match-list">
           {upcoming.map((m) => (
             <MatchCard key={m.id} {...m} />
+          ))}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-head">
+          <div>
+            <p className="section-kicker">Table</p>
+            <h2>Standings preview</h2>
+            <p>Ranked by wins, then game difference, then point difference.</p>
+          </div>
+          <Link href="/leaderboard" className="btn btn-ghost">
+            Full table
+          </Link>
+        </div>
+        <div className="preview-standings">
+          {standings.slice(0, 4).map((row, i) => (
+            <div key={row.teamId} className={`preview-row ${i === 0 && completed > 0 ? "leader" : ""}`}>
+              <span className="preview-rank">{i + 1}</span>
+              <span className="preview-team">{row.teamName}</span>
+              <span className="preview-record">
+                {row.won}W–{row.lost}L
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-head">
+          <div>
+            <p className="section-kicker">Roster</p>
+            <h2>Teams</h2>
+          </div>
+          <Link href="/teams" className="btn btn-ghost">
+            All teams
+          </Link>
+        </div>
+        <div className="teams-grid">
+          {teams.map((t, i) => (
+            <article key={t.id} className={`team-panel accent-${(i % 4) + 1}`}>
+              <h3>{t.name}</h3>
+              <p>
+                {t.player1} · {t.player2}
+              </p>
+            </article>
           ))}
         </div>
       </section>

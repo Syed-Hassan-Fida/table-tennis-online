@@ -1,9 +1,9 @@
 # Smash League — Table Tennis Tournament
 
-Doubles table tennis league site with live scoring, match pool, leaderboard, and win/loss tracking.
+Premium doubles table tennis league with **click-to-score** match center, fixtures, standings, and team profiles.
 
-**Stack:** Next.js + Prisma + SQLite  
-**Deploy:** Free Vercel — connect the repo and deploy. No database add-on, no env vars to configure.
+**Stack:** Next.js 16 + Prisma + SQLite + Lucide  
+**Deploy:** Free Vercel — connect the repo and deploy. No database add-on required.
 
 ## Teams
 
@@ -14,6 +14,13 @@ Doubles table tennis league site with live scoring, match pool, leaderboard, and
 
 All other matches are at **7:30 PM**. Format: double round-robin (12 matches), best of 5.
 
+## Scoring
+
+- Tap the large home/away pads to add points (no typing)
+- Games to 11, win by 2 (ITTF)
+- First to 3 games wins the match
+- Undo / reset available on the match page
+
 ## Local
 
 ```bash
@@ -23,19 +30,22 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+Reset league data:
+
+```bash
+npm run db:reset
+```
+
+## Tests
+
+```bash
+npm run build && npm run start
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npx playwright test
+```
+
 ## Vercel (free)
 
-1. Push this repo to GitHub / GitLab / Bitbucket
-2. Import the project in Vercel
-3. Click Deploy
+1. Push this repo to GitHub  
+2. Import in Vercel → Deploy  
 
-That is it. The build seeds SQLite automatically. `.env.production` is already in the repo with the SQLite URL (no secrets).
-
-## Scoring
-
-- Open any match → use **+ Point** buttons or edit game scores
-- Games to 11, must win by 2 (ITTF)
-- Match is best of 5 (first to 3 games)
-- Leaderboard ranks by wins → game difference → point difference
-
-Scores are also mirrored in the browser so a free Vercel cold start does not wipe the scorer’s device.
+Build seeds SQLite automatically when empty. No env vars to configure.

@@ -9,8 +9,12 @@
     "lint": "eslint",
     "db:push": "DATABASE_URL=\"file:./tournament.db\" prisma db push",
     "db:seed": "DATABASE_URL=\"file:./tournament.db\" tsx prisma/seed.ts",
-    "db:reset": "DATABASE_URL=\"file:./tournament.db\" prisma db push --force-reset && DATABASE_URL=\"file:./tournament.db\" tsx prisma/seed.ts",
-    "postinstall": "DATABASE_URL=\"file:./tournament.db\" prisma generate"
+    "db:reset": "FORCE_SEED=1 DATABASE_URL=\"file:./tournament.db\" prisma db push --force-reset && FORCE_SEED=1 DATABASE_URL=\"file:./tournament.db\" tsx prisma/seed.ts",
+    "postinstall": "DATABASE_URL=\"file:./tournament.db\" prisma generate",
+    "test:unit": "tsx scripts/verify-scoring.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test": "npm run test:unit && npm run test:e2e"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -18,11 +22,13 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "date-fns": "^4.4.0",
+    "lucide-react": "^0.577.0",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

@@ -1,9 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { adjustPoint, resetMatch, setGameScore, startMatch } from "@/lib/actions";
-import { isGameComplete, isMatchComplete, matchGamesNeeded } from "@/lib/scoring";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Minus, RotateCcw, Play, Trophy } from "lucide-react";
+import { adjustPoint, resetMatch, startMatch } from "@/lib/actions";
+import { isMatchComplete, matchGamesNeeded } from "@/lib/scoring";
+import {
+  applyPointDelta,
+  deriveFromGames,
+  fingerprintMatch,
+  resolveTargetGame,
+} from "@/lib/match-state";
+import { StatusBadge } from "@/components/StatusBadge";
 
 type Game = {
   id: string;
@@ -16,197 +23,351 @@ type Game = {
 
 type Team = { id: string; name: string; player1: string; player2: string };
 
-type Props = {
-  match: {
-    id: string;
-    status: string;
-    homeScore: number;
-    awayScore: number;
-    homeTeam: Team;
-    awayTeam: Team;
-    games: Game[];
-  };
+export type MatchView = {
+  id: string;
+  status: string;
+  homeScore: number;
+  awayScore: number;
+  homeTeam: Team;
+  awayTeam: Team;
+  games: Game[];
 };
 
+type Props = { match: MatchView };
+
 export function ScoreBoard({ match }: Props) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [state, setState] = useState<MatchView>(match);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<"HOME" | "AWAY" | null>(null);
+
+  const busy = useRef(false);
+  const stateRef = useRef(state);
+  const syncedKey = useRef(fingerprintMatch(match));
+  const flashTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // Sync from server only when data actually changed and we are not mid-mutation
+  useEffect(() => {
+    const key = fingerprintMatch(match);
+    if (busy.current) return;
+    if (key === syncedKey.current) return;
+    syncedKey.current = key;
+    setState(match);
+    stateRef.current = match;
+  }, [match]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    };
+  }, []);
 
   const need = matchGamesNeeded();
-  const decided = isMatchComplete(match.homeScore, match.awayScore);
-  const openGame =
-    match.games.find((g) => !g.isComplete) ?? match.games[match.games.length - 1];
+  const openGame = useMemo(() => {
+    return state.games.find((g) => !g.isComplete) ?? state.games[state.games.length - 1];
+  }, [state.games]);
 
-  function run(action: () => Promise<unknown>) {
+  const decided = isMatchComplete(state.homeScore, state.awayScore);
+  const winnerName =
+    state.homeScore > state.awayScore ? state.homeTeam.name : state.awayTeam.name;
+
+  const canUndoHome = state.games.some((g) => g.homePoints > 0);
+  const canUndoAway = state.games.some((g) => g.awayPoints > 0);
+
+  function syncFromServer(updated: MatchView | null | undefined) {
+    if (!updated) return;
+    const next: MatchView = {
+      id: updated.id,
+      status: updated.status,
+      homeScore: updated.homeScore,
+      awayScore: updated.awayScore,
+      homeTeam: updated.homeTeam,
+      awayTeam: updated.awayTeam,
+      games: updated.games,
+    };
+    syncedKey.current = fingerprintMatch(next);
+    setState(next);
+    stateRef.current = next;
+  }
+
+  async function score(side: "HOME" | "AWAY", delta: number) {
+    if (busy.current) return;
+
+    const current = stateRef.current;
+    const target = resolveTargetGame(current.games, side, delta);
+    const currentDecided = isMatchComplete(current.homeScore, current.awayScore);
+
+    if (delta > 0 && currentDecided) return;
+    if (delta < 0) {
+      const pts = side === "HOME" ? target.homePoints : target.awayPoints;
+      if (pts <= 0) return;
+    }
+
+    busy.current = true;
+    setPending(true);
     setError(null);
-    startTransition(async () => {
-      try {
-        await action();
-        router.refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Something went wrong");
-      }
-    });
+
+    if (delta > 0) {
+      setFlash(side);
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setFlash(null), 160);
+    }
+
+    const snapshot = current;
+    const nextGames = applyPointDelta(current.games, target.gameNumber, side, delta);
+    const derived = deriveFromGames(nextGames);
+    const optimistic: MatchView = {
+      ...current,
+      games: nextGames,
+      homeScore: derived.homeScore,
+      awayScore: derived.awayScore,
+      status: derived.status,
+    };
+    setState(optimistic);
+    stateRef.current = optimistic;
+    syncedKey.current = fingerprintMatch(optimistic);
+
+    try {
+      const updated = await adjustPoint(current.id, target.gameNumber, side, delta);
+      syncFromServer(updated as MatchView);
+    } catch (e) {
+      syncedKey.current = fingerprintMatch(snapshot);
+      setState(snapshot);
+      stateRef.current = snapshot;
+      setError(e instanceof Error ? e.message : "Could not update score");
+    } finally {
+      busy.current = false;
+      setPending(false);
+    }
+  }
+
+  async function runReset() {
+    if (!confirm("Reset all scores for this match?")) return;
+    if (busy.current) return;
+    busy.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      const updated = await resetMatch(stateRef.current.id);
+      syncFromServer(updated as MatchView);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not reset match");
+    } finally {
+      busy.current = false;
+      setPending(false);
+    }
+  }
+
+  async function runStart() {
+    if (busy.current) return;
+    busy.current = true;
+    setPending(true);
+    setError(null);
+    const snapshot = stateRef.current;
+    const optimistic = { ...snapshot, status: "LIVE" };
+    setState(optimistic);
+    stateRef.current = optimistic;
+    syncedKey.current = fingerprintMatch(optimistic);
+    try {
+      const updated = await startMatch(snapshot.id);
+      syncFromServer(updated as MatchView);
+    } catch (e) {
+      syncedKey.current = fingerprintMatch(snapshot);
+      setState(snapshot);
+      stateRef.current = snapshot;
+      setError(e instanceof Error ? e.message : "Could not start match");
+    } finally {
+      busy.current = false;
+      setPending(false);
+    }
   }
 
   return (
-    <div className={`scoreboard ${pending ? "is-pending" : ""}`}>
-      <div className="scoreboard-header">
-        <div className="sb-team">
-          <p className="sb-label">Home</p>
-          <h2>{match.homeTeam.name}</h2>
-          <p className="sb-players">
-            {match.homeTeam.player1} · {match.homeTeam.player2}
-          </p>
-        </div>
-        <div className="sb-center">
-          <p className="sb-games">
-            {match.homeScore} – {match.awayScore}
-          </p>
-          <p className="sb-sub">Best of 5 · first to {need}</p>
-          {decided ? (
-            <p className="sb-final">
-              Winner:{" "}
-              {match.homeScore > match.awayScore
-                ? match.homeTeam.name
-                : match.awayTeam.name}
+    <div
+      className={`scoreboard ${pending ? "is-pending" : ""}`}
+      data-testid="scoreboard"
+      data-pending={pending ? "true" : "false"}
+      data-status={state.status}
+    >
+      <div className="sb-top">
+        <div className="sb-status-row">
+          <StatusBadge status={state.status} />
+          {!decided && (
+            <p className="sb-meta">
+              Best of 5 · first to {need} · Game {openGame.gameNumber}
             </p>
-          ) : (
-            <p className="sb-sub">Game {openGame.gameNumber}</p>
           )}
         </div>
-        <div className="sb-team right">
-          <p className="sb-label">Away</p>
-          <h2>{match.awayTeam.name}</h2>
-          <p className="sb-players">
-            {match.awayTeam.player1} · {match.awayTeam.player2}
-          </p>
+
+        <div className="sb-names">
+          <div>
+            <p className="sb-label">Home</p>
+            <h2>{state.homeTeam.name}</h2>
+            <p className="sb-players">
+              {state.homeTeam.player1} · {state.homeTeam.player2}
+            </p>
+          </div>
+          <div className="sb-names-right">
+            <p className="sb-label">Away</p>
+            <h2>{state.awayTeam.name}</h2>
+            <p className="sb-players">
+              {state.awayTeam.player1} · {state.awayTeam.player2}
+            </p>
+          </div>
         </div>
+
+        {decided && (
+          <div className="sb-winner" data-testid="match-winner">
+            <Trophy size={18} aria-hidden />
+            <span>Winner — {winnerName}</span>
+          </div>
+        )}
       </div>
 
-      <div className="live-controls">
+      <div className="click-board" role="group" aria-label="Click to score">
         <button
           type="button"
-          className="btn btn-ghost"
-          disabled={pending}
-          onClick={() => run(() => adjustPoint(match.id, openGame.gameNumber, "HOME", -1))}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className="btn btn-score home"
+          className={`score-pad home ${flash === "HOME" ? "flash" : ""}`}
+          data-testid="score-home"
           disabled={pending || decided}
-          onClick={() => run(() => adjustPoint(match.id, openGame.gameNumber, "HOME", 1))}
+          onClick={() => score("HOME", 1)}
+          aria-label={`Add point to ${state.homeTeam.name}`}
         >
-          + Point Home
+          <span className="score-pad-value">{openGame.homePoints}</span>
+          <span className="score-pad-hint">Tap for point</span>
         </button>
-        <div className="live-points">
-          <span>{openGame.homePoints}</span>
-          <span className="sep">:</span>
-          <span>{openGame.awayPoints}</span>
+
+        <div className="games-won" aria-label="Games won">
+          <div className="games-won-card">
+            <span className="games-won-num" data-testid="games-home">
+              {state.homeScore}
+            </span>
+            <span className="games-won-dots" aria-hidden>
+              {Array.from({ length: need }).map((_, i) => (
+                <i key={i} className={i < state.homeScore ? "on" : undefined} />
+              ))}
+            </span>
+          </div>
+          <span className="games-won-sep" aria-hidden>
+            ↔
+          </span>
+          <div className="games-won-card">
+            <span className="games-won-num" data-testid="games-away">
+              {state.awayScore}
+            </span>
+            <span className="games-won-dots" aria-hidden>
+              {Array.from({ length: need }).map((_, i) => (
+                <i key={i} className={i < state.awayScore ? "on" : undefined} />
+              ))}
+            </span>
+          </div>
         </div>
+
         <button
           type="button"
-          className="btn btn-score away"
+          className={`score-pad away ${flash === "AWAY" ? "flash" : ""}`}
+          data-testid="score-away"
           disabled={pending || decided}
-          onClick={() => run(() => adjustPoint(match.id, openGame.gameNumber, "AWAY", 1))}
+          onClick={() => score("AWAY", 1)}
+          aria-label={`Add point to ${state.awayTeam.name}`}
         >
-          + Point Away
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={pending}
-          onClick={() => run(() => adjustPoint(match.id, openGame.gameNumber, "AWAY", -1))}
-        >
-          −
+          <span className="score-pad-value">{openGame.awayPoints}</span>
+          <span className="score-pad-hint">Tap for point</span>
         </button>
       </div>
 
-      <div className="games-grid">
-        {match.games.map((g) => {
-          const locked =
-            decided &&
-            g.gameNumber > match.homeScore + match.awayScore &&
-            !g.isComplete;
+      <div className="undo-row">
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon"
+          data-testid="undo-home"
+          disabled={pending || !canUndoHome}
+          onClick={() => score("HOME", -1)}
+          aria-label="Undo home point"
+        >
+          <Minus size={16} aria-hidden />
+          Undo home
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon"
+          data-testid="undo-away"
+          disabled={pending || !canUndoAway}
+          onClick={() => score("AWAY", -1)}
+          aria-label="Undo away point"
+        >
+          <Minus size={16} aria-hidden />
+          Undo away
+        </button>
+      </div>
+
+      <div className="game-rail" aria-label="Game history">
+        {state.games.map((g) => {
+          const active = !decided && g.gameNumber === openGame.gameNumber;
+          const unused =
+            decided && g.gameNumber > state.homeScore + state.awayScore && !g.isComplete;
           return (
             <div
               key={g.id}
-              className={`game-card ${g.isComplete ? "done" : ""} ${
-                g.gameNumber === openGame.gameNumber && !decided ? "active" : ""
-              } ${locked ? "locked" : ""}`}
+              className={`game-chip ${g.isComplete ? "done" : ""} ${active ? "active" : ""} ${
+                unused ? "locked" : ""
+              }`}
+              data-testid={`game-chip-${g.gameNumber}`}
             >
-              <div className="game-title">Game {g.gameNumber}</div>
-              <div className="game-inputs">
-                <label>
-                  <span>Home</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={g.homePoints}
-                    disabled={pending || locked}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      run(() => setGameScore(match.id, g.gameNumber, v, g.awayPoints));
-                    }}
-                  />
-                </label>
-                <label>
-                  <span>Away</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={g.awayPoints}
-                    disabled={pending || locked}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      run(() => setGameScore(match.id, g.gameNumber, g.homePoints, v));
-                    }}
-                  />
-                </label>
-              </div>
-              <p className="game-state">
+              <span className="game-chip-label">G{g.gameNumber}</span>
+              <span className="game-chip-score">
+                {g.homePoints}–{g.awayPoints}
+              </span>
+              <span className="game-chip-state">
                 {g.isComplete
-                  ? `Won by ${g.winnerSide === "HOME" ? "Home" : "Away"}`
-                  : isGameComplete(g.homePoints, g.awayPoints)
-                    ? "Complete"
-                    : "In play"}
-              </p>
+                  ? g.winnerSide === "HOME"
+                    ? "Home"
+                    : "Away"
+                  : active
+                    ? "Live"
+                    : unused
+                      ? "—"
+                      : "Queued"}
+              </span>
             </div>
           );
         })}
       </div>
 
       <div className="sb-actions">
-        {match.status === "SCHEDULED" && (
+        {state.status === "SCHEDULED" && (
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary btn-icon"
+            data-testid="start-match"
             disabled={pending}
-            onClick={() => run(() => startMatch(match.id))}
+            onClick={runStart}
           >
+            <Play size={16} aria-hidden />
             Start Match
           </button>
         )}
         <button
           type="button"
-          className="btn btn-ghost"
+          className="btn btn-ghost btn-icon"
+          data-testid="reset-match"
           disabled={pending}
-          onClick={() => {
-            if (confirm("Reset all scores for this match?")) {
-              run(() => resetMatch(match.id));
-            }
-          }}
+          onClick={runReset}
         >
+          <RotateCcw size={16} aria-hidden />
           Reset Match
         </button>
       </div>
 
-      {error && <p className="form-error">{error}</p>}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

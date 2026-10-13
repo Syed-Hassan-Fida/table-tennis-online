@@ -27,6 +27,12 @@ function involvesSherryAhsan(a: string, b: string): boolean {
 }
 
 async function main() {
+  const existing = await prisma.team.count();
+  if (existing > 0 && process.env.FORCE_SEED !== "1") {
+    console.log(`Seed skipped — ${existing} teams already present (set FORCE_SEED=1 to reset).`);
+    return;
+  }
+
   await prisma.matchGame.deleteMany();
   await prisma.match.deleteMany();
   await prisma.team.deleteMany();
@@ -41,24 +47,17 @@ async function main() {
 
   const byName = Object.fromEntries(created.map((t) => [t.name, t]));
 
-  // Double round-robin (home & away) = complete league, 12 matches
   const pairings: { home: string; away: string; day: number; round: number }[] = [
-    // Round 1 — opening fixtures
     { home: "Sherry & Ahsan", away: "Hamza Awan & Ali Rehman", day: 0, round: 1 },
     { home: "Umair & Hassan", away: "Zohaib & Husnain", day: 0, round: 1 },
-    // Round 2
     { home: "Sherry & Ahsan", away: "Umair & Hassan", day: 1, round: 2 },
     { home: "Hamza Awan & Ali Rehman", away: "Zohaib & Husnain", day: 1, round: 2 },
-    // Round 3
     { home: "Sherry & Ahsan", away: "Zohaib & Husnain", day: 2, round: 3 },
     { home: "Hamza Awan & Ali Rehman", away: "Umair & Hassan", day: 2, round: 3 },
-    // Round 4 — return fixtures
     { home: "Hamza Awan & Ali Rehman", away: "Sherry & Ahsan", day: 3, round: 4 },
     { home: "Zohaib & Husnain", away: "Umair & Hassan", day: 3, round: 4 },
-    // Round 5
     { home: "Umair & Hassan", away: "Sherry & Ahsan", day: 4, round: 5 },
     { home: "Zohaib & Husnain", away: "Hamza Awan & Ali Rehman", day: 4, round: 5 },
-    // Round 6
     { home: "Zohaib & Husnain", away: "Sherry & Ahsan", day: 5, round: 6 },
     { home: "Umair & Hassan", away: "Hamza Awan & Ali Rehman", day: 5, round: 6 },
   ];
@@ -66,11 +65,9 @@ async function main() {
   let matchNumber = 1;
   for (const p of pairings) {
     const sherrySlot = involvesSherryAhsan(p.home, p.away);
-    const scheduledAt = sherrySlot
-      ? atTime(p.day, 15, 0) // 3:00 PM
-      : atTime(p.day, 19, 30); // 7:30 PM
+    const scheduledAt = sherrySlot ? atTime(p.day, 15, 0) : atTime(p.day, 19, 30);
 
-    const match = await prisma.match.create({
+    await prisma.match.create({
       data: {
         round: p.round,
         matchNumber,
@@ -90,11 +87,11 @@ async function main() {
     });
 
     console.log(
-      `Match ${match.matchNumber} R${p.round}: ${p.home} vs ${p.away} @ ${
+      `Match ${matchNumber} R${p.round}: ${p.home} vs ${p.away} @ ${
         sherrySlot ? "3:00 PM" : "7:30 PM"
       }`
     );
-    matchNumber++;
+    matchNumber += 1;
   }
 
   console.log("Seed complete: 4 teams, 12 league matches.");

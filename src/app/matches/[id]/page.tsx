@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { ScoreBoard } from "@/components/ScoreBoard";
-import { ScoreSync } from "@/components/ScoreSync";
 import { prisma } from "@/lib/prisma";
-import { formatMatchDate, formatMatchTime, statusLabel } from "@/lib/format";
+import { formatMatchDate, formatMatchTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -25,29 +25,24 @@ export default async function MatchPage({
   if (!match) notFound();
 
   return (
-    <main className="page">
-      <p className="lede" style={{ marginBottom: "0.75rem" }}>
-        <Link href="/matches">← Match pool</Link>
-      </p>
-      <h1 className="page-title">
-        Match {match.matchNumber}
-      </h1>
-      <p className="lede">
-        Round {match.round} · {statusLabel(match.status)} ·{" "}
-        {formatMatchDate(match.scheduledAt)} · {formatMatchTime(match.scheduledAt)}
-      </p>
+    <main className="page match-page">
+      <Link href="/matches" className="back-link">
+        <ArrowLeft size={16} aria-hidden />
+        Match pool
+      </Link>
 
-      <div className="section">
-        <ScoreSync
-          matchId={match.id}
-          games={match.games.map((g) => ({
-            gameNumber: g.gameNumber,
-            homePoints: g.homePoints,
-            awayPoints: g.awayPoints,
-          }))}
-        />
-        <ScoreBoard match={match} />
-      </div>
+      <header className="match-page-head">
+        <div>
+          <p className="section-kicker">Match center</p>
+          <h1 className="page-title">Match {match.matchNumber}</h1>
+          <p className="lede">
+            Round {match.round} · {formatMatchDate(match.scheduledAt)} ·{" "}
+            {formatMatchTime(match.scheduledAt)}
+          </p>
+        </div>
+      </header>
+
+      <ScoreBoard match={match} />
     </main>
   );
 }

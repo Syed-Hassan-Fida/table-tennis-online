@@ -54,3 +54,11 @@ model MatchGame {
 
   @@unique([matchId, gameNumber])
 }
+
+/** Singleton league settings (id is always "default"). */
+model LeagueConfig {
+  id          String   @id @default("default")
+  /// 21 = classic (pre-2001), 11 = modern ITTF
+  pointsToWin Int      @default(21)
+  updatedAt   DateTime @updatedAt
+}

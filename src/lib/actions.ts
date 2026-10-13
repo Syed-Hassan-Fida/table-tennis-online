@@ -26,14 +26,17 @@ async function recalculateMatch(matchId: string) {
 
   const complete = isMatchComplete(homeGames, awayGames);
   const need = matchGamesNeeded();
+  const hasPoints =
+    homeGames + awayGames > 0 ||
+    match.games.some((g) => g.homePoints + g.awayPoints > 0);
 
   let winnerId: string | null = null;
-  let status = match.status;
+  let status: string;
 
   if (complete) {
     winnerId = homeGames >= need ? match.homeTeamId : match.awayTeamId;
     status = "COMPLETED";
-  } else if (homeGames > 0 || awayGames > 0 || match.games.some((g) => g.homePoints + g.awayPoints > 0)) {
+  } else if (hasPoints) {
     status = "LIVE";
     winnerId = null;
   } else {
@@ -57,6 +60,13 @@ async function recalculateMatch(matchId: string) {
   });
 }
 
+function revalidateMatchPaths(matchId: string) {
+  revalidatePath("/");
+  revalidatePath("/matches");
+  revalidatePath(`/matches/${matchId}`);
+  revalidatePath("/leaderboard");
+}
+
 export async function setGameScore(
   matchId: string,
   gameNumber: number,
@@ -78,7 +88,6 @@ export async function setGameScore(
     },
   });
 
-  // If this game isn't complete, clear later games that shouldn't count yet
   if (!complete) {
     await prisma.matchGame.updateMany({
       where: { matchId, gameNumber: { gt: gameNumber } },
@@ -91,31 +100,23 @@ export async function setGameScore(
     });
   }
 
-  // Lock games beyond the deciding game once match is decided
-  const updated = await recalculateMatch(matchId);
+  let updated = await recalculateMatch(matchId);
 
   if (updated.status === "COMPLETED") {
-    const need = matchGamesNeeded();
     const played = updated.homeScore + updated.awayScore;
-    // Keep only games that were needed; zero out unused trailing games visually already seeded
-    if (updated.homeScore >= need || updated.awayScore >= need) {
-      await prisma.matchGame.updateMany({
-        where: {
-          matchId,
-          gameNumber: { gt: played },
-          isComplete: false,
-        },
-        data: { homePoints: 0, awayPoints: 0, winnerSide: null },
-      });
-    }
+    await prisma.matchGame.updateMany({
+      where: {
+        matchId,
+        gameNumber: { gt: played },
+        isComplete: false,
+      },
+      data: { homePoints: 0, awayPoints: 0, winnerSide: null },
+    });
+    updated = await recalculateMatch(matchId);
   }
 
-  revalidatePath("/");
-  revalidatePath("/matches");
-  revalidatePath(`/matches/${matchId}`);
-  revalidatePath("/leaderboard");
-
-  return recalculateMatch(matchId);
+  revalidateMatchPaths(matchId);
+  return updated;
 }
 
 export async function adjustPoint(
@@ -124,22 +125,18 @@ export async function adjustPoint(
   side: "HOME" | "AWAY",
   delta: number
 ) {
-  const game = await prisma.matchGame.findUnique({
-    where: { matchId_gameNumber: { matchId, gameNumber } },
-  });
-  if (!game) throw new Error("Game not found");
-
-  const match = await prisma.match.findUnique({ where: { id: matchId } });
-  if (!match) throw new Error("Match not found");
-  if (match.status === "COMPLETED") {
-    // Allow edits — recalculate after
+  if (delta === 0) {
+    throw new Error("No score change");
   }
 
-  // Only allow scoring on the current open game
   const games = await prisma.matchGame.findMany({
     where: { matchId },
     orderBy: { gameNumber: "asc" },
   });
+  if (games.length === 0) throw new Error("Match games not found");
+
+  const game = games.find((g) => g.gameNumber === gameNumber);
+  if (!game) throw new Error("Game not found");
 
   let homeWins = 0;
   let awayWins = 0;
@@ -147,13 +144,20 @@ export async function adjustPoint(
     if (g.isComplete && g.winnerSide === "HOME") homeWins++;
     if (g.isComplete && g.winnerSide === "AWAY") awayWins++;
   }
-  if (isMatchComplete(homeWins, awayWins) && delta > 0) {
-    // Match already decided — still allow adjust via setGameScore path for corrections
-  }
 
-  const currentOpen = games.find((g) => !g.isComplete) ?? games[games.length - 1];
-  if (currentOpen.gameNumber !== gameNumber && delta !== 0) {
-    // Allow editing completed games for corrections
+  if (delta > 0) {
+    if (isMatchComplete(homeWins, awayWins)) {
+      throw new Error("Match already completed");
+    }
+    const currentOpen = games.find((g) => !g.isComplete) ?? games[games.length - 1];
+    if (currentOpen.gameNumber !== gameNumber) {
+      throw new Error("Score only the active game");
+    }
+  } else {
+    const pts = side === "HOME" ? game.homePoints : game.awayPoints;
+    if (pts <= 0) {
+      throw new Error("Nothing to undo");
+    }
   }
 
   const nextHome = side === "HOME" ? Math.max(0, game.homePoints + delta) : game.homePoints;
@@ -173,8 +177,51 @@ export async function resetMatch(matchId: string) {
     },
   });
 
-  await prisma.match.update({
+  const updated = await prisma.match.update({
     where: { id: matchId },
+    data: {
+      homeScore: 0,
+      awayScore: 0,
+      winnerId: null,
+      status: "SCHEDULED",
+    },
+    include: {
+      homeTeam: true,
+      awayTeam: true,
+      games: { orderBy: { gameNumber: "asc" } },
+    },
+  });
+
+  revalidateMatchPaths(matchId);
+  return updated;
+}
+
+export async function startMatch(matchId: string) {
+  const updated = await prisma.match.update({
+    where: { id: matchId },
+    data: { status: "LIVE" },
+    include: {
+      homeTeam: true,
+      awayTeam: true,
+      games: { orderBy: { gameNumber: "asc" } },
+    },
+  });
+  revalidateMatchPaths(matchId);
+  return updated;
+}
+
+/** Wipe every match score/status so the league starts clean. */
+export async function resetLeague() {
+  await prisma.matchGame.updateMany({
+    data: {
+      homePoints: 0,
+      awayPoints: 0,
+      isComplete: false,
+      winnerSide: null,
+    },
+  });
+
+  const result = await prisma.match.updateMany({
     data: {
       homeScore: 0,
       awayScore: 0,
@@ -185,25 +232,8 @@ export async function resetMatch(matchId: string) {
 
   revalidatePath("/");
   revalidatePath("/matches");
-  revalidatePath(`/matches/${matchId}`);
   revalidatePath("/leaderboard");
+  revalidatePath("/teams");
 
-  return prisma.match.findUnique({
-    where: { id: matchId },
-    include: {
-      homeTeam: true,
-      awayTeam: true,
-      games: { orderBy: { gameNumber: "asc" } },
-    },
-  });
-}
-
-export async function startMatch(matchId: string) {
-  await prisma.match.update({
-    where: { id: matchId },
-    data: { status: "LIVE" },
-  });
-  revalidatePath("/");
-  revalidatePath("/matches");
-  revalidatePath(`/matches/${matchId}`);
+  return { resetMatches: result.count };
 }

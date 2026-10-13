@@ -1,4 +1,5 @@
 import { LeaderboardTable } from "@/components/LeaderboardTable";
+import { LeagueResetButton } from "@/components/LeagueResetButton";
 import { getStandings } from "@/lib/standings";
 
 export const dynamic = "force-dynamic";
@@ -8,12 +9,17 @@ export default async function LeaderboardPage() {
 
   return (
     <main className="page">
-      <p className="section-kicker">Standings</p>
-      <h1 className="page-title">Leaderboard</h1>
-      <p className="lede">
-        Ranked by wins, then game difference, then point difference. Games are
-        best of 5 (ITTF scoring to 11, win by 2).
-      </p>
+      <div className="page-head-row">
+        <div>
+          <p className="section-kicker">Competition table</p>
+          <h1 className="page-title">Standings</h1>
+          <p className="lede">
+            Ranked by wins, then game difference, then point difference. Matches are
+            best of 5 with ITTF scoring to 11 (must win by 2).
+          </p>
+        </div>
+        <LeagueResetButton />
+      </div>
       <div className="section">
         <LeaderboardTable rows={rows} />
       </div>
