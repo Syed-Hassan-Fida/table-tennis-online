@@ -3,10 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "DATABASE_URL=\"file:./tournament.db\" prisma generate && DATABASE_URL=\"file:./tournament.db\" prisma db push && DATABASE_URL=\"file:./tournament.db\" tsx prisma/seed.ts && next dev",
+    "build": "DATABASE_URL=\"file:./tournament.db\" prisma generate && DATABASE_URL=\"file:./tournament.db\" prisma db push && DATABASE_URL=\"file:./tournament.db\" tsx prisma/seed.ts && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "DATABASE_URL=\"file:./tournament.db\" prisma db push",
+    "db:seed": "DATABASE_URL=\"file:./tournament.db\" tsx prisma/seed.ts",
+    "db:reset": "DATABASE_URL=\"file:./tournament.db\" prisma db push --force-reset && DATABASE_URL=\"file:./tournament.db\" tsx prisma/seed.ts",
+    "postinstall": "DATABASE_URL=\"file:./tournament.db\" prisma generate"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
