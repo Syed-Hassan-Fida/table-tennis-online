@@ -3,6 +3,7 @@ import { ArrowRight, CalendarDays, Trophy, Users, Zap } from "lucide-react";
 import { MatchCard } from "@/components/MatchCard";
 import { RulesModal } from "@/components/RulesModal";
 import { ScoringSetup } from "@/components/ScoringSetup";
+import { HeroDecor } from "@/components/HeroDecor";
 import { prisma } from "@/lib/prisma";
 import { getStandings } from "@/lib/standings";
 import { getLeagueConfig, isTournamentStarted } from "@/lib/league-config";
@@ -58,11 +59,14 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {featured && (
-          <div className="hero-feature-wrap">
-            <MatchCard {...featured} />
-          </div>
-        )}
+        <div className="hero-visual">
+          <HeroDecor />
+          {featured && (
+            <div className="hero-feature-wrap">
+              <MatchCard {...featured} />
+            </div>
+          )}
+        </div>
       </section>
 
       <ScoringSetup pointsToWin={config.pointsToWin} locked={started} />

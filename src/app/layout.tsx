@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
+import { AmbientBalls } from "@/components/AmbientBalls";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
       <body className="min-h-full antialiased">
+        <AmbientBalls />
         <div className="site-shell">
           <Nav />
           {children}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <circle cx="32" cy="32" r="30" fill="#F4F5F0"/>
+  <circle cx="32" cy="32" r="30" fill="url(#ballShine)" fill-opacity="0.55"/>
+  <path d="M8 34c8-10 18-14 24-14s16 4 24 14" stroke="#111714" stroke-opacity="0.12" stroke-width="2" stroke-linecap="round"/>
+  <path d="M14 22c6 4 12 6 18 6s12-2 18-6" stroke="#111714" stroke-opacity="0.08" stroke-width="2" stroke-linecap="round"/>
+  <defs>
+    <radialGradient id="ballShine" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(22 20) rotate(90) scale(28)">
+      <stop stop-color="#fff"/>
+      <stop offset="1" stop-color="#F4F5F0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>
