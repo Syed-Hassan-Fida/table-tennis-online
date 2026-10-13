@@ -15,7 +15,7 @@ export default async function LeaderboardPage() {
           <h1 className="page-title">Standings</h1>
           <p className="lede">
             Ranked by wins, then game difference, then point difference. Matches are
-            best of 5 with ITTF scoring to 11 (must win by 2).
+            best of 5 with the league scoring system (11 or 21, must win by 2).
           </p>
         </div>
         <LeagueResetButton />

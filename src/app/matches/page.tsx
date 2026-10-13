@@ -26,7 +26,7 @@ export default async function MatchesPage() {
           <h1 className="page-title">Match pool</h1>
           <p className="lede">
             Double round-robin · Sherry & Ahsan at 3:00 PM · all other fixtures at
-            7:30 PM · best of 5 (to 11, win by 2).
+            7:30 PM · best of 5 · scoring system chosen on the home page.
           </p>
         </div>
         <LeagueResetButton />

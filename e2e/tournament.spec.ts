@@ -39,11 +39,29 @@ async function resetMatch(page: Page) {
   await expect(page.getByTestId("games-away")).toContainText("0");
 }
 
+async function ensureModernScoring(page: Page) {
+  await page.goto("/matches");
+  page.once("dialog", (d) => d.accept());
+  await page.getByTestId("reset-league").click();
+  await expect(page.getByText(/Reset \d+ matches/i)).toBeVisible({ timeout: 15_000 });
+
+  await page.goto("/");
+  await expect(page.getByTestId("scoring-setup")).toBeVisible();
+  await page.getByTestId("scoring-11").click();
+  await expect(page.getByTestId("scoring-setup")).toContainText(/Modern \(11 pts\)/i, {
+    timeout: 10_000,
+  });
+}
+
 test.describe("Smash League", () => {
   test("home, nav, matches, standings, teams load", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/Smash/i);
     await expect(page.getByLabel("League snapshot")).toBeVisible();
+    await expect(page.getByTestId("open-rules")).toBeVisible();
+    await page.getByTestId("open-rules").click();
+    await expect(page.getByRole("dialog", { name: /Match rules/i })).toBeVisible();
+    await page.getByRole("button", { name: "Got it" }).click();
 
     await openMobileNavIfNeeded(page);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Matches" }).click();
@@ -62,6 +80,7 @@ test.describe("Smash League", () => {
   });
 
   test("click scoreboard has no number inputs and scores a game", async ({ page }) => {
+    await ensureModernScoring(page);
     await openMatch(page, 1);
     await expect(page.locator('input[type="number"]')).toHaveCount(0);
 
@@ -88,6 +107,7 @@ test.describe("Smash League", () => {
   });
 
   test("match completes at 3-0 via click scoring", async ({ page }) => {
+    await ensureModernScoring(page);
     await openMatch(page, 2);
     await resetMatch(page);
 

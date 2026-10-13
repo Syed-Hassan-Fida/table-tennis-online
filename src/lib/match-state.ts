@@ -1,8 +1,10 @@
 import {
+  DEFAULT_POINTS_TO_WIN,
   gameWinner,
   isGameComplete,
   isMatchComplete,
   matchGamesNeeded,
+  normalizePointsToWin,
 } from "@/lib/scoring";
 
 export type GameState = {
@@ -12,14 +14,6 @@ export type GameState = {
   awayPoints: number;
   isComplete: boolean;
   winnerSide: string | null;
-};
-
-export type MatchSnapshot = {
-  id: string;
-  status: string;
-  homeScore: number;
-  awayScore: number;
-  games: GameState[];
 };
 
 export function fingerprintMatch(m: {
@@ -40,7 +34,10 @@ export function fingerprintMatch(m: {
   return `${m.id}|${m.status}|${m.homeScore}-${m.awayScore}|${games}`;
 }
 
-export function deriveFromGames(games: GameState[]) {
+export function deriveFromGames(
+  games: GameState[],
+  pointsToWin: number = DEFAULT_POINTS_TO_WIN
+) {
   let homeScore = 0;
   let awayScore = 0;
   for (const g of games) {
@@ -51,28 +48,37 @@ export function deriveFromGames(games: GameState[]) {
   const hasPoints =
     homeScore + awayScore > 0 || games.some((g) => g.homePoints + g.awayPoints > 0);
   const status = decided ? "COMPLETED" : hasPoints ? "LIVE" : "SCHEDULED";
-  return { homeScore, awayScore, decided, status, need: matchGamesNeeded() };
+  return {
+    homeScore,
+    awayScore,
+    decided,
+    status,
+    need: matchGamesNeeded(),
+    pointsToWin: normalizePointsToWin(pointsToWin),
+  };
 }
 
 export function applyPointDelta(
   games: GameState[],
   gameNumber: number,
   side: "HOME" | "AWAY",
-  delta: number
+  delta: number,
+  pointsToWin: number = DEFAULT_POINTS_TO_WIN
 ): GameState[] {
+  const target = normalizePointsToWin(pointsToWin);
   return games.map((g) => {
     if (g.gameNumber !== gameNumber) return g;
     const homePoints =
-      side === "HOME" ? Math.max(0, Math.min(30, g.homePoints + delta)) : g.homePoints;
+      side === "HOME" ? Math.max(0, Math.min(60, g.homePoints + delta)) : g.homePoints;
     const awayPoints =
-      side === "AWAY" ? Math.max(0, Math.min(30, g.awayPoints + delta)) : g.awayPoints;
-    const complete = isGameComplete(homePoints, awayPoints);
+      side === "AWAY" ? Math.max(0, Math.min(60, g.awayPoints + delta)) : g.awayPoints;
+    const complete = isGameComplete(homePoints, awayPoints, target);
     return {
       ...g,
       homePoints,
       awayPoints,
       isComplete: complete,
-      winnerSide: gameWinner(homePoints, awayPoints),
+      winnerSide: gameWinner(homePoints, awayPoints, target),
     };
   });
 }

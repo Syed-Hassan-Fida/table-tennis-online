@@ -27,6 +27,12 @@ function involvesSherryAhsan(a: string, b: string): boolean {
 }
 
 async function main() {
+  await prisma.leagueConfig.upsert({
+    where: { id: "default" },
+    create: { id: "default", pointsToWin: 21 },
+    update: {},
+  });
+
   const existing = await prisma.team.count();
   if (existing > 0 && process.env.FORCE_SEED !== "1") {
     console.log(`Seed skipped — ${existing} teams already present (set FORCE_SEED=1 to reset).`);
@@ -36,6 +42,11 @@ async function main() {
   await prisma.matchGame.deleteMany();
   await prisma.match.deleteMany();
   await prisma.team.deleteMany();
+  await prisma.leagueConfig.upsert({
+    where: { id: "default" },
+    create: { id: "default", pointsToWin: 21 },
+    update: { pointsToWin: 21 },
+  });
 
   const created = await Promise.all(
     TEAMS.map((t) =>

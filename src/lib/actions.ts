@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getLeagueConfig, isTournamentStarted } from "@/lib/league-config";
 import {
+  DEFAULT_POINTS_TO_WIN,
   gameWinner,
   isGameComplete,
   isMatchComplete,
   matchGamesNeeded,
+  normalizePointsToWin,
+  type PointsToWin,
 } from "@/lib/scoring";
 
 async function recalculateMatch(matchId: string) {
@@ -73,10 +77,11 @@ export async function setGameScore(
   homePoints: number,
   awayPoints: number
 ) {
-  const home = Math.max(0, Math.min(30, Math.floor(homePoints)));
-  const away = Math.max(0, Math.min(30, Math.floor(awayPoints)));
-  const complete = isGameComplete(home, away);
-  const winner = gameWinner(home, away);
+  const { pointsToWin } = await getLeagueConfig();
+  const home = Math.max(0, Math.min(60, Math.floor(homePoints)));
+  const away = Math.max(0, Math.min(60, Math.floor(awayPoints)));
+  const complete = isGameComplete(home, away, pointsToWin);
+  const winner = gameWinner(home, away, pointsToWin);
 
   await prisma.matchGame.update({
     where: { matchId_gameNumber: { matchId, gameNumber } },
@@ -210,7 +215,6 @@ export async function startMatch(matchId: string) {
   return updated;
 }
 
-/** Wipe every match score/status so the league starts clean. */
 export async function resetLeague() {
   await prisma.matchGame.updateMany({
     data: {
@@ -236,4 +240,31 @@ export async function resetLeague() {
   revalidatePath("/teams");
 
   return { resetMatches: result.count };
+}
+
+export async function setScoringSystem(pointsToWin: number) {
+  const next = normalizePointsToWin(pointsToWin) as PointsToWin;
+  if (await isTournamentStarted()) {
+    throw new Error(
+      "Scoring system is locked after the tournament has started. Reset all scores first."
+    );
+  }
+
+  await prisma.leagueConfig.upsert({
+    where: { id: "default" },
+    create: { id: "default", pointsToWin: next },
+    update: { pointsToWin: next },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/matches");
+  revalidatePath("/leaderboard");
+  revalidatePath("/teams");
+
+  return { pointsToWin: next };
+}
+
+export async function ensureLeagueConfig() {
+  await getLeagueConfig();
+  return { pointsToWin: DEFAULT_POINTS_TO_WIN };
 }

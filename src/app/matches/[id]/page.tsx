@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { ScoreBoard } from "@/components/ScoreBoard";
 import { prisma } from "@/lib/prisma";
+import { getLeagueConfig } from "@/lib/league-config";
 import { formatMatchDate, formatMatchTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -13,14 +14,17 @@ export default async function MatchPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const match = await prisma.match.findUnique({
-    where: { id },
-    include: {
-      homeTeam: true,
-      awayTeam: true,
-      games: { orderBy: { gameNumber: "asc" } },
-    },
-  });
+  const [match, config] = await Promise.all([
+    prisma.match.findUnique({
+      where: { id },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        games: { orderBy: { gameNumber: "asc" } },
+      },
+    }),
+    getLeagueConfig(),
+  ]);
 
   if (!match) notFound();
 
@@ -37,12 +41,12 @@ export default async function MatchPage({
           <h1 className="page-title">Match {match.matchNumber}</h1>
           <p className="lede">
             Round {match.round} · {formatMatchDate(match.scheduledAt)} ·{" "}
-            {formatMatchTime(match.scheduledAt)}
+            {formatMatchTime(match.scheduledAt)} · games to {config.pointsToWin}
           </p>
         </div>
       </header>
 
-      <ScoreBoard match={match} />
+      <ScoreBoard match={match} pointsToWin={config.pointsToWin} />
     </main>
   );
 }

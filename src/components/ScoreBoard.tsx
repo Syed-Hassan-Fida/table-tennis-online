@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, RotateCcw, Play, Trophy } from "lucide-react";
 import { adjustPoint, resetMatch, startMatch } from "@/lib/actions";
-import { isMatchComplete, matchGamesNeeded } from "@/lib/scoring";
+import {
+  isMatchComplete,
+  matchGamesNeeded,
+  normalizePointsToWin,
+  servesPerTurn,
+  type PointsToWin,
+} from "@/lib/scoring";
 import {
   applyPointDelta,
   deriveFromGames,
@@ -33,9 +39,11 @@ export type MatchView = {
   games: Game[];
 };
 
-type Props = { match: MatchView };
+type Props = { match: MatchView; pointsToWin: PointsToWin };
 
-export function ScoreBoard({ match }: Props) {
+export function ScoreBoard({ match, pointsToWin }: Props) {
+  const pointsTarget = normalizePointsToWin(pointsToWin);
+  const serves = servesPerTurn(pointsTarget);
   const [state, setState] = useState<MatchView>(match);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,12 +106,12 @@ export function ScoreBoard({ match }: Props) {
     if (busy.current) return;
 
     const current = stateRef.current;
-    const target = resolveTargetGame(current.games, side, delta);
+    const gameTarget = resolveTargetGame(current.games, side, delta);
     const currentDecided = isMatchComplete(current.homeScore, current.awayScore);
 
     if (delta > 0 && currentDecided) return;
     if (delta < 0) {
-      const pts = side === "HOME" ? target.homePoints : target.awayPoints;
+      const pts = side === "HOME" ? gameTarget.homePoints : gameTarget.awayPoints;
       if (pts <= 0) return;
     }
 
@@ -118,8 +126,14 @@ export function ScoreBoard({ match }: Props) {
     }
 
     const snapshot = current;
-    const nextGames = applyPointDelta(current.games, target.gameNumber, side, delta);
-    const derived = deriveFromGames(nextGames);
+    const nextGames = applyPointDelta(
+      current.games,
+      gameTarget.gameNumber,
+      side,
+      delta,
+      pointsTarget
+    );
+    const derived = deriveFromGames(nextGames, pointsTarget);
     const optimistic: MatchView = {
       ...current,
       games: nextGames,
@@ -132,7 +146,7 @@ export function ScoreBoard({ match }: Props) {
     syncedKey.current = fingerprintMatch(optimistic);
 
     try {
-      const updated = await adjustPoint(current.id, target.gameNumber, side, delta);
+      const updated = await adjustPoint(current.id, gameTarget.gameNumber, side, delta);
       syncFromServer(updated as MatchView);
     } catch (e) {
       syncedKey.current = fingerprintMatch(snapshot);
@@ -198,7 +212,8 @@ export function ScoreBoard({ match }: Props) {
           <StatusBadge status={state.status} />
           {!decided && (
             <p className="sb-meta">
-              Best of 5 · first to {need} · Game {openGame.gameNumber}
+              Best of 5 · to {pointsTarget} (win by 2) · {serves} serves · Game{" "}
+              {openGame.gameNumber}
             </p>
           )}
         </div>

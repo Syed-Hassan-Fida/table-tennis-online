@@ -1,19 +1,25 @@
 import Link from "next/link";
 import { ArrowRight, CalendarDays, Trophy, Users, Zap } from "lucide-react";
 import { MatchCard } from "@/components/MatchCard";
+import { RulesModal } from "@/components/RulesModal";
+import { ScoringSetup } from "@/components/ScoringSetup";
 import { prisma } from "@/lib/prisma";
 import { getStandings } from "@/lib/standings";
+import { getLeagueConfig, isTournamentStarted } from "@/lib/league-config";
+import { scoringSystemLabel } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [matches, standings, teams] = await Promise.all([
+  const [matches, standings, teams, config, started] = await Promise.all([
     prisma.match.findMany({
       include: { homeTeam: true, awayTeam: true },
       orderBy: [{ scheduledAt: "asc" }, { matchNumber: "asc" }],
     }),
     getStandings(),
     prisma.team.findMany({ orderBy: { name: "asc" } }),
+    getLeagueConfig(),
+    isTournamentStarted(),
   ]);
 
   const live = matches.filter((m) => m.status === "LIVE");
@@ -34,7 +40,8 @@ export default async function HomePage() {
           </h1>
           <p className="hero-lede">
             Four teams. Twelve fixtures. Click-to-score match center with live
-            standings — Sherry & Ahsan at 3:00 PM, everyone else at 7:30 PM.
+            standings — Sherry & Ahsan at 3:00 PM, everyone else at 7:30 PM. Active
+            rules: {scoringSystemLabel(config.pointsToWin)}.
           </p>
           <div className="hero-cta">
             <Link
@@ -47,6 +54,7 @@ export default async function HomePage() {
             <Link href="/leaderboard" className="btn btn-ghost">
               View standings
             </Link>
+            <RulesModal pointsToWin={config.pointsToWin} />
           </div>
         </div>
 
@@ -56,6 +64,8 @@ export default async function HomePage() {
           </div>
         )}
       </section>
+
+      <ScoringSetup pointsToWin={config.pointsToWin} locked={started} />
 
       <section className="stats-strip" aria-label="League snapshot">
         <div className="stat">
@@ -127,7 +137,10 @@ export default async function HomePage() {
         </div>
         <div className="preview-standings">
           {standings.slice(0, 4).map((row, i) => (
-            <div key={row.teamId} className={`preview-row ${i === 0 && completed > 0 ? "leader" : ""}`}>
+            <div
+              key={row.teamId}
+              className={`preview-row ${i === 0 && completed > 0 ? "leader" : ""}`}
+            >
               <span className="preview-rank">{i + 1}</span>
               <span className="preview-team">{row.teamName}</span>
               <span className="preview-record">

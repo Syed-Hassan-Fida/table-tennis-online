@@ -425,6 +425,179 @@ main.page {
   color: var(--danger);
 }
 
+.scoring-setup {
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, #24302a 0%, var(--surface) 55%);
+  display: grid;
+  gap: 16px;
+}
+
+.scoring-setup h2 {
+  margin: 0;
+  font-size: clamp(1.4rem, 3vw, 1.8rem);
+  letter-spacing: -0.03em;
+}
+
+.scoring-setup-copy p:last-child {
+  margin: 8px 0 0;
+  color: var(--muted);
+  max-width: 60ch;
+  line-height: 1.5;
+}
+
+.scoring-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scoring-option {
+  appearance: none;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  padding: 14px 16px;
+  display: grid;
+  gap: 6px;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.scoring-option strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.scoring-option span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.scoring-option:hover:not(:disabled) {
+  border-color: rgba(215, 255, 104, 0.35);
+  transform: translateY(-1px);
+}
+
+.scoring-option.is-active {
+  border-color: rgba(215, 255, 104, 0.55);
+  background: rgba(215, 255, 104, 0.12);
+}
+
+.scoring-option:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.scoring-setup-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(8, 12, 10, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.modal-panel {
+  width: min(640px, 100%);
+  max-height: min(86vh, 820px);
+  overflow: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.modal-head,
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-foot {
+  border-bottom: 0;
+  border-top: 1px solid var(--line);
+  justify-content: flex-end;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+}
+
+.modal-close {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 8px 18px 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.modal-body h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+}
+
+.modal-body p,
+.modal-body li {
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.92rem;
+}
+
+.modal-body p {
+  margin: 0;
+}
+
+.modal-body ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 6px;
+}
+
+.modal-body strong {
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .scoring-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 .section-head p,
 .lede {
   margin: 8px 0 0;

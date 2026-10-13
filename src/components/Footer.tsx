@@ -7,7 +7,7 @@ export function Footer() {
         <div>
           <p className="footer-brand">Smash League</p>
           <p className="footer-copy">
-            Doubles table tennis · Best of 5 · ITTF scoring to 11 (win by 2)
+            Doubles table tennis · Best of 5 · Classic 21 or modern 11 (win by 2)
           </p>
         </div>
         <div className="footer-links">
