@@ -83,6 +83,43 @@ export function applyPointDelta(
   });
 }
 
+/** Absolute score set for a game (umpire entry). Clears later games if incomplete. */
+export function applyAbsoluteScore(
+  games: GameState[],
+  gameNumber: number,
+  homePoints: number,
+  awayPoints: number,
+  pointsToWin: number = DEFAULT_POINTS_TO_WIN
+): GameState[] {
+  const target = normalizePointsToWin(pointsToWin);
+  const home = Math.max(0, Math.min(60, Math.floor(homePoints)));
+  const away = Math.max(0, Math.min(60, Math.floor(awayPoints)));
+  const complete = isGameComplete(home, away, target);
+  const winner = gameWinner(home, away, target);
+
+  return games.map((g) => {
+    if (g.gameNumber === gameNumber) {
+      return {
+        ...g,
+        homePoints: home,
+        awayPoints: away,
+        isComplete: complete,
+        winnerSide: winner,
+      };
+    }
+    if (!complete && g.gameNumber > gameNumber) {
+      return {
+        ...g,
+        homePoints: 0,
+        awayPoints: 0,
+        isComplete: false,
+        winnerSide: null,
+      };
+    }
+    return g;
+  });
+}
+
 /** Active game for adding points, or last game with points for undo. */
 export function resolveTargetGame(
   games: GameState[],

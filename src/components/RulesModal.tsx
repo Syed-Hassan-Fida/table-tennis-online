@@ -133,6 +133,7 @@ export function RulesModal({ pointsToWin }: Props) {
                 <ul>
                   <li>Use the large home/away pads — tap to add a point (no typing required).</li>
                   <li>Undo home/away corrects the last point on that side, even after a game ends.</li>
+                  <li>Umpires can also type exact points for the live game and tap Apply.</li>
                   <li>Reset match clears one fixture; Reset all scores clears the whole league.</li>
                 </ul>
               </section>

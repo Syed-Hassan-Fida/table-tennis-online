@@ -79,10 +79,12 @@ test.describe("Smash League", () => {
     await expect(page.getByText("Sherry & Ahsan")).toBeVisible();
   });
 
-  test("click scoreboard has no number inputs and scores a game", async ({ page }) => {
+  test("click scoreboard scores a game and umpire can set points", async ({ page }) => {
     await ensureModernScoring(page);
     await openMatch(page, 1);
-    await expect(page.locator('input[type="number"]')).toHaveCount(0);
+    // Tap pads stay click-only; umpire entry is a separate addon
+    await expect(page.locator('.click-board input[type="number"]')).toHaveCount(0);
+    await expect(page.getByTestId("umpire-set")).toBeVisible();
 
     const start = page.getByTestId("start-match");
     if (await start.isVisible()) {
@@ -104,6 +106,14 @@ test.describe("Smash League", () => {
     await page.getByTestId("undo-away").click();
     await waitSettled(page);
     await expect(page.getByTestId("score-away")).toContainText("0");
+
+    await page.getByTestId("umpire-home").fill("7");
+    await page.getByTestId("umpire-away").fill("3");
+    await page.getByTestId("umpire-apply").click();
+    await waitSettled(page);
+    await expect(page.getByTestId("score-home")).toContainText("7");
+    await expect(page.getByTestId("score-away")).toContainText("3");
+    await expect(page.getByTestId("game-chip-2")).toContainText("7–3");
   });
 
   test("match completes at 3-0 via click scoring", async ({ page }) => {

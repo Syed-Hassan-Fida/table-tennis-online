@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Minus, RotateCcw, Play, Trophy } from "lucide-react";
-import { adjustPoint, resetMatch, startMatch } from "@/lib/actions";
+import { Check, Minus, RotateCcw, Play, Trophy } from "lucide-react";
+import { adjustPoint, resetMatch, setGameScore, startMatch } from "@/lib/actions";
 import {
   isMatchComplete,
   matchGamesNeeded,
@@ -11,6 +11,7 @@ import {
   type PointsToWin,
 } from "@/lib/scoring";
 import {
+  applyAbsoluteScore,
   applyPointDelta,
   deriveFromGames,
   fingerprintMatch,
@@ -48,6 +49,8 @@ export function ScoreBoard({ match, pointsToWin }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<"HOME" | "AWAY" | null>(null);
+  const [homeDraft, setHomeDraft] = useState("0");
+  const [awayDraft, setAwayDraft] = useState("0");
 
   const busy = useRef(false);
   const stateRef = useRef(state);
@@ -78,6 +81,11 @@ export function ScoreBoard({ match, pointsToWin }: Props) {
   const openGame = useMemo(() => {
     return state.games.find((g) => !g.isComplete) ?? state.games[state.games.length - 1];
   }, [state.games]);
+
+  useEffect(() => {
+    setHomeDraft(String(openGame.homePoints));
+    setAwayDraft(String(openGame.awayPoints));
+  }, [openGame.gameNumber, openGame.homePoints, openGame.awayPoints]);
 
   const decided = isMatchComplete(state.homeScore, state.awayScore);
   const winnerName =
@@ -153,6 +161,59 @@ export function ScoreBoard({ match, pointsToWin }: Props) {
       setState(snapshot);
       stateRef.current = snapshot;
       setError(e instanceof Error ? e.message : "Could not update score");
+    } finally {
+      busy.current = false;
+      setPending(false);
+    }
+  }
+
+  async function applyManualScore() {
+    if (busy.current || decided) return;
+
+    const home = Math.max(0, Math.min(60, Math.floor(Number(homeDraft))));
+    const away = Math.max(0, Math.min(60, Math.floor(Number(awayDraft))));
+    if (!Number.isFinite(home) || !Number.isFinite(away)) {
+      setError("Enter valid point totals");
+      return;
+    }
+
+    const current = stateRef.current;
+    const gameTarget = resolveTargetGame(current.games, "HOME", 1);
+
+    busy.current = true;
+    setPending(true);
+    setError(null);
+
+    const snapshot = current;
+    const nextGames = applyAbsoluteScore(
+      current.games,
+      gameTarget.gameNumber,
+      home,
+      away,
+      pointsTarget
+    );
+    const derived = deriveFromGames(nextGames, pointsTarget);
+    const optimistic: MatchView = {
+      ...current,
+      games: nextGames,
+      homeScore: derived.homeScore,
+      awayScore: derived.awayScore,
+      status: derived.status,
+    };
+    setState(optimistic);
+    stateRef.current = optimistic;
+    syncedKey.current = fingerprintMatch(optimistic);
+    setHomeDraft(String(home));
+    setAwayDraft(String(away));
+
+    try {
+      const updated = await setGameScore(current.id, gameTarget.gameNumber, home, away);
+      syncFromServer(updated as MatchView);
+    } catch (e) {
+      syncedKey.current = fingerprintMatch(snapshot);
+      setState(snapshot);
+      stateRef.current = snapshot;
+      setError(e instanceof Error ? e.message : "Could not set score");
     } finally {
       busy.current = false;
       setPending(false);
@@ -319,6 +380,61 @@ export function ScoreBoard({ match, pointsToWin }: Props) {
           Undo away
         </button>
       </div>
+
+      <form
+        className="umpire-set"
+        data-testid="umpire-set"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void applyManualScore();
+        }}
+      >
+        <p className="umpire-set-label">Umpire — set points (Game {openGame.gameNumber})</p>
+        <div className="umpire-set-row">
+          <label className="umpire-field">
+            <span>Home</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={60}
+              step={1}
+              data-testid="umpire-home"
+              value={homeDraft}
+              disabled={pending || decided}
+              onChange={(e) => setHomeDraft(e.target.value)}
+              aria-label={`Set home points for ${state.homeTeam.name}`}
+            />
+          </label>
+          <span className="umpire-sep" aria-hidden>
+            –
+          </span>
+          <label className="umpire-field">
+            <span>Away</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={60}
+              step={1}
+              data-testid="umpire-away"
+              value={awayDraft}
+              disabled={pending || decided}
+              onChange={(e) => setAwayDraft(e.target.value)}
+              aria-label={`Set away points for ${state.awayTeam.name}`}
+            />
+          </label>
+          <button
+            type="submit"
+            className="btn btn-ghost btn-icon"
+            data-testid="umpire-apply"
+            disabled={pending || decided}
+          >
+            <Check size={16} aria-hidden />
+            Apply
+          </button>
+        </div>
+      </form>
 
       <div className="game-rail" aria-label="Game history">
         {state.games.map((g) => {
